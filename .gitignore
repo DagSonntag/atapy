@@ -20,6 +20,16 @@ parts/
 sdist/
 var/
 wheels/
+.ipynb_checkpoints/
+.sync/
+cryptodata/
+data/
+ib_connection/
+ib_insync/
+model_instances/
+models/
+notebooks/
+old_code/
 pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/
