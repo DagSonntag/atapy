@@ -16,7 +16,7 @@ import math
 logger = logging.getLogger()
 
 # Todo: add this as init input and instance parameter, and also handle multiple currencies
-CURRENCY_ASSET = Asset('na', 'currency', 'currency', 'EUR')
+CURRENCY_ASSET = Asset('na', 'currency', 'currency')
 
 
 class PortfolioHandler(ABC):

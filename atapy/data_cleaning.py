@@ -3,6 +3,7 @@ import datetime
 import logging
 from atapy.interval import Interval
 from typing import Dict
+import pytz
 
 logger = logging.getLogger()
 
@@ -10,23 +11,8 @@ logger = logging.getLogger()
 Various data cleaning and preprocessing methods used by the data connections to clean data
 """
 
-
-def get_liquid_hours(liquid_hours: str) -> (datetime.time, datetime.time):
-    """ Parses a liquid_hours string (HH:mm-HH:mm) into a start datetime.time and end datetime.time"""
-    if liquid_hours is None or len(liquid_hours) != 9:
-        raise NotImplementedError(
-            "The liquid hours are given in an unexpected format, please investigate: {}".format(liquid_hours))
-    start_trade_time, end_trade_time = liquid_hours.split("-")
-    start_trade_time = datetime.time(int(start_trade_time[0:2]), int(start_trade_time[2:]))
-    if end_trade_time == '2400':
-        end_trade_time = datetime.time.max
-    else:
-        end_trade_time = datetime.time(int(end_trade_time[0:2]), int(end_trade_time[2:]))
-    return start_trade_time, end_trade_time
-
-
 def add_start_and_end_time(data_df: pd.DataFrame, interval: Interval) -> pd.DataFrame:
-    """Adds the start and endtime, as well as conversts the date column to datetime.date format"""
+    """ Adds the start_time and end_time, as well as converts the date column to datetime.date format """
     df = data_df.copy()
     # Convert the date column
     df['start_time'] = pd.to_datetime(df.date)
@@ -37,31 +23,33 @@ def add_start_and_end_time(data_df: pd.DataFrame, interval: Interval) -> pd.Data
 
 def filter_out_non_traded_hours(data_df: pd.DataFrame, start_trade_time: datetime.time,
                                 end_trade_time: datetime.time) -> pd.DataFrame:
-    """Filters out any samples that are outside the given trading hours"""
+    """ Filters out any samples that are outside the given trading hours """
     return data_df[(data_df.start_time.dt.time >= start_trade_time)
                    & (data_df.end_time.dt.time <= end_trade_time)]
 
 
 def fill_missing_intervals(intraday_df: pd.DataFrame, interval: Interval, traded_dates: pd.Series,
-                           start_daily_trade_time: datetime.time, end_daily_trade_time: datetime.time) -> pd.DataFrame:
+                           start_daily_trade_time: datetime.time, end_daily_trade_time: datetime.time,
+                           time_zone: pytz.tzinfo.DstTzInfo or pytz.tzinfo.StaticTzInfo) -> pd.DataFrame:
     """
     Fills in missing intervals (if there are any) for an intraday_df. Will also create 'fake' samples if for the given
     traded days if all samples are missing for these days, and they are in between the first and last sample
     """
-
+    # Save the last samples of each day to be fed forward in case of no trades the following day
     end_of_day_samples = intraday_df.groupby('date').tail(1).copy()
     end_of_day_samples['next_trading_date'] = list(end_of_day_samples['date'].iloc[1:]) + [None]
 
     def fill_missing_intervals_per_day(current_date: datetime.date, single_day_df: pd.DataFrame,
                                        fill_initial, fill_tail):
         expected_start_times = pd.Series(pd.date_range(
-            start=datetime.datetime.combine(current_date, start_daily_trade_time) if fill_initial else
-            single_day_df.start_time.iloc[0],
-            end=datetime.datetime.combine(current_date, end_daily_trade_time) if fill_tail else
-            single_day_df.end_time.iloc[-1],
+            start=(time_zone.localize(datetime.datetime.combine(current_date, start_daily_trade_time))
+                   if fill_initial else single_day_df.start_time.iloc[0]),
+            end=(time_zone.localize(datetime.datetime.combine(current_date, end_daily_trade_time))
+                 if fill_tail else single_day_df.end_time.iloc[-1]),
             freq="{}s".format(interval.in_seconds()),
             closed='left',
-            name='start_time'))
+            name='start_time',
+            tz=time_zone))
         # If some initial slots are missing
         if fill_initial and single_day_df.start_time.min() != expected_start_times[0]:
             # Get the closing price from previously day
@@ -86,7 +74,6 @@ def fill_missing_intervals(intraday_df: pd.DataFrame, interval: Interval, traded
                              single_day_df.shape[0] > 0 else expected_start_times) + datetime.timedelta(
                     minutes=interval.in_minutes()),
                 'real_sample': False})
-            a = single_day_df.shape[0]
             single_day_df = pd.concat([initial_df, single_day_df])
         if single_day_df.shape[0] < expected_start_times.shape[0]:
             single_day_df = pd.merge(single_day_df, pd.DataFrame(expected_start_times), on='start_time', how='right')
@@ -118,7 +105,7 @@ def fill_missing_intervals(intraday_df: pd.DataFrame, interval: Interval, traded
     return filled_temp_df.reset_index()[intraday_df.columns]
 
 
-def aggregate_intraday_data(intraday_df: pd.DataFrame, interval: Interval) -> Dict[Interval, pd.DataFrame]:
+def aggregate_intraday_feature_data(intraday_df: pd.DataFrame, interval: Interval) -> Dict[Interval, pd.DataFrame]:
     """Aggregates up the data from intraday data to higher level intervals. Very time-consuming!"""
 
     # Aggregate the data to the other time intervals. Done column wise (and not on the entire dataframe at once) since
@@ -134,10 +121,9 @@ def aggregate_intraday_data(intraday_df: pd.DataFrame, interval: Interval) -> Di
              'average': df.groupby(interval_keys)[['volume', 'average']].apply(
                               lambda x: sum(x.volume * x.average) / sum(x.volume) if sum(x.volume) > 0 else
                               x.average.iloc[0]).values,
-             'start_time': df.groupby(interval_keys).start_time.min().values,
-             'end_time': df.groupby(interval_keys).end_time.max().values,
+             'start_time': df.groupby(interval_keys).start_time.min(),
+             'end_time': df.groupby(interval_keys).end_time.max(),
              'real_sample': df.groupby(interval_keys).real_sample.any().values})
-        temp_df['date'] = temp_df.start_time.dt.date
         return temp_df.reset_index(drop=True)
 
     aggregated_dfs = {interval: intraday_df}

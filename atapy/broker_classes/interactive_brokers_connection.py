@@ -52,7 +52,7 @@ EXCHANGES_CSV_STRING = """full_name, mic_code, ib_name\n
                           NASDAQ Helsinki, XHEL, HEX\n
                           NASDAQ US, XNAS, ISLAND\n
                           """
-EXCHANGES_TRANSLATION_TABLE = pd.read_csv(StringIO(EXCHANGES_CSV_STRING))
+EXCHANGES_TRANSLATION_TABLE = pd.read_csv(StringIO(EXCHANGES_CSV_STRING), skipinitialspace=True)
 DATA_REQUEST_TIMEOUT = 60 * 10  # Time in seconds before a request is considered bad and a new attempt is made
 RECONNECT_WAIT_TIME = 300  # The time to wait in seconds before reconnecting in case of disconnect
 
@@ -71,46 +71,62 @@ class InteractiveBrokersConnection:
         self.tws_ip = tws_ip
         self.tws_port = tws_port
         self.error_events = {}
+        self.client_id = np.random.randint(1000)
         self.reconnect()
+        self.ib2mic = {ib_name: mic_code for _, mic_code, ib_name
+                       in EXCHANGES_TRANSLATION_TABLE.to_records(index=False)}
+        self.interval_to_aggregate = Interval.five_min
 
     def catch_error_event(self, req_id, error_code, message, contract):
         self.error_events[req_id] = (error_code, message, contract)
 
+    def disconnect(self):
+        try:
+            self.ib.errorEvent.clear()
+            self.ib.disconnect()
+        except Exception as e:
+            logger.error(e)
+
     def reconnect(self):
         # First, make sure to clean up old connection:
-        self.ib.disconnect()
-        self.ib.errorEvent.clear()
+        self.disconnect()
         # Then create a new connection
         self.ib = ibi.IB()
+        # Try 10 different client ids and see if a connection can be established
         for i in range(10):
-            connection_id = np.random.randint(100)
-            self.ib.connect(self.tws_ip, self.tws_port, clientId=connection_id,
+            self.ib.connect(self.tws_ip, self.tws_port, clientId=self.client_id,
                             keepPortfolioUpToDate=self.keep_portfolio_up_to_date)
             if self.ib.isConnected():
+                # Connected
                 self.ib.errorEvent += self.catch_error_event
                 break
             else:
-                logger.info("Unable to connect to TWS on {}:{} using id {}. Trying again...".format(
-                    self.tws_ip, self.tws_port, connection_id))
+                # Try again
+                logger.debug("Unable to connect to TWS on {}:{} using client_id {}. Trying again...".format(
+                    self.tws_ip, self.tws_port, self.client_id))
+                self.client_id = np.random.randint(1000)
         if self.ib.isConnected():
-            logger.info("Connected to TWS on {}:{} using id {}".format(self.tws_ip, self.tws_port, connection_id))
+            logger.info("Connected to TWS on {}:{} using client id {}".format(self.tws_ip, self.tws_port,
+                                                                              self.client_id))
         else:
             raise ConnectionRefusedError("Unable to connect to TWS on {}:{}".format(self.tws_ip, self.tws_port))
 
+    def __repr__(self):
+        return "IB connection {}:{} client_id:{}".format(self.tws_ip, self.tws_port, self.client_id)
+
     def __del__(self):
-        logger.info("Removing IB connection due to garbage collection")
-        self.ib.disconnect()
-        self.ib.errorEvent.clear()
+        logger.info("Removing IB connection {} due to garbage collection".format(self))
+        self.disconnect()
 
     def ensure_connection(self):
         # If not connected, reconnect
         while not self.ib.isConnected():
-            logger.warning("Client disconnected, reconnecting")
+            logger.warning("{} disconnected, reconnecting".format(self))
             self.reconnect()
             if not self.ib.isConnected():
                 time.sleep(RECONNECT_WAIT_TIME)
             else:
-                logger.info("Client reconnected")
+                logger.info("{} reconnected".format(self))
 
     def _discover_exchanges(self):
         #  Collect all contracts to find exchanges
@@ -124,11 +140,11 @@ class InteractiveBrokersConnection:
                     self.ensure_connection()
                     res = self.ib.reqMatchingSymbols("".join(search_combination))
                 except ConnectionError as e:
-                    logger.error("Connection broken, retrying")
+                    logger.error("{}: Connection broken {}, retrying".format(self, e))
                     time.sleep(RECONNECT_WAIT_TIME)
                     continue
                 except TimeoutError as e:
-                    logger.error("Timeout error, retrying")
+                    logger.error("{}: Timeout error {}, retrying".format(self, e))
                     time.sleep(RECONNECT_WAIT_TIME)
                     continue
                 except Exception as e:
@@ -144,9 +160,9 @@ class InteractiveBrokersConnection:
 
         # Then also add in exchanges that can be found from the reqScannerParameters. The additional exchanges added
         # are normally exchanges that are not the 'primary' exchange for the stocks
-        import xml.etree.ElementTree as ET
+        import xml.etree.ElementTree as ElementTree
         xml = self.ib.reqScannerParameters()
-        tree = ET.fromstring(xml)
+        tree = ElementTree.fromstring(xml)
         loc_exchanges = sorted(list(set([e.text for e in tree.findall('.//routeExchange')])))
         known_exchanges = sorted(list(set(loc_exchanges).union(found_exchanges)))
         return known_exchanges
@@ -154,9 +170,8 @@ class InteractiveBrokersConnection:
     def _get_ib_contract(self, asset: Asset):
         df = self.data_accessor.read_custom_table(
             'ib_symbol_translation',
-            "Select * from ib_symbol_translation where security_type = '{}'".format(asset.type.upper())
-            + " and symbol = '{}' and exchange = '{}' and currency = '{}'".format(
-                asset.symbol, asset.exchange, asset.currency))
+            "Select * from ib_symbol_translation where asset_type = '{}'".format(asset.type.upper())
+            + " and symbol = '{}' and exchange = '{}'".format(asset.symbol, asset.exchange))
         if df.shape[0] == 0:
             raise AssetNotFoundException(asset)
         else:

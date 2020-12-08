@@ -1,12 +1,13 @@
 import tensorflow as tf
 import datetime
-from typing import TYPE_CHECKING, Callable, Dict
+from typing import TYPE_CHECKING, Callable, Optional
 import sys
 from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Dict
 import pandas as pd
+import pytz
 
 if TYPE_CHECKING:
     from atapy.data_accessor import DataAccessor
@@ -41,34 +42,50 @@ def dataset_creator(accessor: 'DataAccessor', single_instance_generator_function
     return dataset.batch(batch_size).prefetch(prefetch)
 
 
-def to_datetime(time_var: str or datetime.datetime or datetime.date):
+def set_time_zone(dt: datetime.datetime, time_zone: Optional[str or pytz.tzinfo.DstTzInfo or pytz.tzinfo.StaticTzInfo]):
+    """ Adds a timezone to a naive datetime object, or, if it is  aware, converts it to the given time zone """
+    if time_zone is None:
+        return dt
+    elif isinstance(time_zone, str):
+        time_zone = pytz.timezone(time_zone)
+    elif isinstance(time_zone, (pytz.tzinfo.DstTzInfo, pytz.tzinfo.StaticTzInfo)):
+        pass
+    else:
+        raise NotImplementedError('Currently unable to handle time_zone type {}'.format(type(time_zone)))
+    if dt.tzinfo is None:
+        return time_zone.localize(dt)
+    else:
+        return dt.astimezone(time_zone)
+
+
+def to_datetime(time_var: str or datetime.datetime or datetime.date,
+                time_zone: Optional[str or pytz.tzinfo.DstTzInfo or pytz.tzinfo.StaticTzInfo] = None):
     """ Converts common time and date formats to datetime by detecting how it is formatted """
     if isinstance(time_var, str):
         # Format 'YYMMDD HH:mm:ss'
         if len(time_var) == 17 and time_var[8] == " " and time_var[11] == ":" and time_var[14] == ":":
-            return datetime.datetime.strptime(time_var, '%Y%m%d %H:%M:%S')
+            ret_datetime = datetime.datetime.strptime(time_var, '%Y%m%d %H:%M:%S')
         # Format YYYY-MM-DD HH:mm:ss
-        if len(time_var) == 19 and time_var[4] == time_var[7] == "-" and time_var[13] == time_var[16] == ":":
-            return datetime.datetime.strptime(time_var, '%Y-%m-%d %H:%M:%S')
-        if len(time_var) == 6:  # Format YYMMDD
-            return datetime.datetime.strptime(time_var, '%Y%m%d')
+        elif len(time_var) == 19 and time_var[4] == time_var[7] == "-" and time_var[13] == time_var[16] == ":":
+            ret_datetime = datetime.datetime.strptime(time_var, '%Y-%m-%d %H:%M:%S')
+        elif len(time_var) == 6:  # Format YYMMDD
+            ret_datetime = datetime.datetime.strptime(time_var, '%Y%m%d')
         elif len(time_var) == 10 and time_var[4] == "-" and time_var[7] == "-":  # Format YYYY-MM-DD
-            return datetime.datetime.strptime(time_var, '%Y-%m-%d')
+            ret_datetime = datetime.datetime.strptime(time_var, '%Y-%m-%d')
         else:
             raise NotImplementedError(
                 "Unknown conversion to date or datetime from string {}".format(time_var))
     elif isinstance(time_var, datetime.datetime):
-        return time_var
+        ret_datetime = time_var
     elif isinstance(time_var, datetime.date):
-        return datetime.datetime.combine(time_var, datetime.datetime.min.time())
+        ret_datetime = datetime.datetime.combine(time_var, datetime.datetime.min.time())
     elif isinstance(time_var, int):
-        if time_var > 1000000000:
-            return datetime.datetime.utcfromtimestamp(time_var/1000)
-        else:
-            return datetime.datetime.utcfromtimestamp(time_var)
+        ret_datetime = pytz.timezone('UTC').localize(datetime.datetime.utcfromtimestamp(time_var/1000))
+
     else:
         raise NotImplementedError(
             "Currently cannot convert the class {} to datetime, please implement".format(type(time_var)))
+    return set_time_zone(ret_datetime, time_zone)
 
 
 def load_classes_in_dir(dir_path: Path) -> None:
@@ -217,13 +234,22 @@ def check_types(data_df: pd.DataFrame, correct_types: Dict):
     return data_df
 
 def to_utc_milliseconds(dt: datetime.datetime):
-    """ Convert a datatime object to miliseconds utc aka UNIX time """
+    """ Convert a datetime object to milliseconds utc aka UNIX time """
     epoch = datetime.datetime.utcfromtimestamp(0)
+    if dt.tzinfo is not None:
+        epoch = epoch.replace(tzinfo=dt.tzinfo)
     return int((dt - epoch).total_seconds() * 1000)
 
-def round_up_til_full_minute(dt: pd.Timestamp):
-    """ Returns the timestamp of the next even minute (i.e. the timestamp where seconds = 0) """
-    if dt.second == 0:
-        return dt
+
+def to_tzinfo(time_zone: str or datetime.tzinfo) -> datetime.tzinfo:
+    """ A helper method to return the time_zone of an asset"""
+    if isinstance(time_zone, str):
+        return pytz.timezone(time_zone)
+    elif isinstance(time_zone, datetime.tzinfo):
+        return time_zone
     else:
-        return dt + datetime.timedelta(minutes=1, seconds=-dt.second)
+        raise NotImplementedError("Unable to handle type {}".format(type(time_zone)))
+
+def add_time_zone_to_time(time: datetime.time, time_zone: datetime.datetime.tzinfo):
+    """ Adds a timezone to a naive time object """
+    return time_zone.localize(datetime.datetime.combine(datetime.datetime.today(), time)).timetz()

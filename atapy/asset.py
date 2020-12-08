@@ -5,9 +5,8 @@ from dataclasses import dataclass
 class Asset:
     """
     A class that identifies an asset. Key attributes are the exchange it is traded on, its (local) symbol on that
-    exchange, the type of asset and the currency it is traded in.
+    exchange and the type of asset it is
     """
     exchange: str
     symbol: str
     type: str
-    currency: str

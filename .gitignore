@@ -30,6 +30,7 @@ model_instances/
 models/
 notebooks/
 old_code/
+.idea/
 pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/

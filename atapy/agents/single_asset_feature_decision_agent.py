@@ -178,7 +178,7 @@ def triple_crossover_decision_func(data_df, short_col_name, medium_col_name, lon
         data_df.loc[(data_df['short_to_medium_diff'] < 0)
                     & (data_df['short_to_long_diff'] > 0)
                     & (data_df['medium_to_long_diff'] > 0), 'signal'] = 'sell'
-    elif sub_strategy =='major_to_both':
+    elif sub_strategy == 'major_to_both':
         data_df['signal'] = None
         data_df.loc[data_df['major_trend'] == 'up', 'signal'] = 'buy'
         data_df.loc[data_df['major_trend'] == 'down', 'signal'] = 'sell'
@@ -187,11 +187,11 @@ def triple_crossover_decision_func(data_df, short_col_name, medium_col_name, lon
     return data_df.signal
 
 
-def zero_crossover_decision_func(data_df, col_name, reversed=False):
+def zero_crossover_decision_func(data_df, col_name, reverse=False):
     """ Returns buy signals when the value in the column is above 0, sell otherwise """
     data_df = data_df.copy()
     data_df['signal'] = None
-    if not reversed:
+    if not reverse:
         data_df.loc[data_df[col_name] > 0, 'signal'] = 'buy'
         data_df.loc[data_df[col_name] < 0, 'signal'] = 'sell'
     else:
@@ -229,7 +229,12 @@ class SingleAssetFeatureDecisionAgent(Agent):
     For the feature functions and the decision functions the first argument should always be the data_df
 
     """
+
+    def set_agent_properties(self, **configuration_dict) -> None:
+        pass
+
     agent_name = 'SingleAssetFeatureDecisionAgent'
+    run_interval = Interval.five_min
 
     def __init__(self, agent_name: str,
                  asset: Asset,
@@ -253,7 +258,7 @@ class SingleAssetFeatureDecisionAgent(Agent):
         self.decision_func = decision_func
         self.decision_func_var_dict = {decision_func_var_name: value_list[0]
                                        for decision_func_var_name, value_list in decision_func_var_dict.items()}
-        self.interval = self.fit_configuration['interval'][0]
+        self.run_interval = self.fit_configuration['interval'][0]
 
     def step(self, accessor: DataAccessor, portfolio_handler: BacktestPortfolioHandler,
              current_time: Optional[datetime.datetime] = None) -> None:
@@ -261,7 +266,7 @@ class SingleAssetFeatureDecisionAgent(Agent):
 
     def execute(self, accessor: DataAccessor, portfolio_handler: BacktestPortfolioHandler,
                 start_time: Optional[datetime.datetime] = None) -> List[Order]:
-        data_df = accessor.get_feature_asset_data(self.asset, interval=self.interval)
+        data_df = accessor.get_feature_asset_data(self.asset, interval=self.run_interval)
         for feature_name, (feature_func, feature_func_var_dict) in self.feature_dict.items():
             if isinstance(feature_name, tuple):
                 feature_name = list(feature_name)
@@ -290,7 +295,7 @@ class SingleAssetFeatureDecisionAgent(Agent):
             elif setting[0] == 'decision':
                 self.decision_func_var_dict[setting[1]] = setting[2]
             elif setting[0] == 'interval':
-                self.interval = setting[1]
+                self.run_interval = setting[1]
             else:
                 raise NotImplementedError("Unknown handling of setting {}".format(setting))
 
@@ -346,10 +351,11 @@ class SingleAssetFeatureDecisionAgent(Agent):
             return all_res
 
     def visualize(self, accessor: DataAccessor, start_time: Optional[datetime.datetime] = None,
-                  include_buy_sell_signals: bool = True, courtage_settings=None,  plotlib: str = 'plotly'):
+                  include_buy_sell_signals: bool = True, courtage_settings=None,  plotlib: str = 'plotly',
+                  **plotlib_args) -> None:
         if plotlib != 'plotly':
             raise NotImplementedError("plotlib {} not implemented".format(plotlib))
-        data_df = accessor.get_feature_asset_data(self.asset, self.interval)
+        data_df = accessor.get_feature_asset_data(self.asset, self.run_interval)
         feature_data_dict = {}
         for feature_name, (feature_func, feature_func_var_dict) in self.feature_dict.items():
             feature_data_dict[feature_name] = feature_func(data_df=data_df, **feature_func_var_dict)
@@ -377,7 +383,7 @@ class SingleAssetFeatureDecisionAgent(Agent):
 
             # Also include the portfolio value, but normalized to the value
             time_zero_value = accessor.get_time_restricted_instance(start_time=start_time).get_feature_asset_data(
-                asset=self.asset, interval=self.interval).close.iloc[0]
+                asset=self.asset, interval=self.run_interval).close.iloc[0]
             port_value = test_portfolio.calculate_value(start_time=start_time)
             if port_value.shape[0] > 1:
                 feature_data_dict['relative_portfolio_value'] = port_value/port_value.iloc[0]*time_zero_value
