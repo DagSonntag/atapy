@@ -90,7 +90,7 @@ class FileAccessor(DataAccessor):
             if self.start_time_limit is not None:
                 if self.start_time_limit.tzinfo is None:
                     # If no timezone is given, assume it is given in local time
-                    df = df[df.date > self.get_asset_local_tzinfo(asset).localize(self.start_time_limit)]
+                    df = df[df.date >= self.get_asset_local_tzinfo(asset).localize(self.start_time_limit)]
                 else:
                     df = df[df.date >= self.start_time_limit]
             if self.end_time_limit is not None:
