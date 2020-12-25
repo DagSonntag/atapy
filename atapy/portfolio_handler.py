@@ -6,7 +6,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 import logging
 from atapy.order import Order
-from atapy.utils import load_classes_in_dir
+from atapy.utils.method_utils import load_classes_in_dir
 from atapy.constants import *
 import matplotlib.pyplot as plt
 from atapy.asset import Asset

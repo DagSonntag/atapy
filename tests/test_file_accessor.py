@@ -4,7 +4,7 @@ import pandas as pd
 import pytz
 from atapy.asset import Asset
 from atapy.interval import Interval
-from atapy.utils import to_datetime
+from atapy.utils.datetime_utils import to_datetime
 
 
 class TestFileAccessor(TestCase):

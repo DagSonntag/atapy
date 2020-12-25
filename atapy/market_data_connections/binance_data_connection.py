@@ -1,7 +1,7 @@
 from requests import RequestException
 import time
 from atapy.data_accessor import RAW_DATA_COLUMN_TYPES, ASSET_INFO_COLUMN_TYPES
-from atapy.utils import to_datetime, to_utc_milliseconds
+from atapy.utils.datetime_utils import to_datetime, to_utc_milliseconds
 from atapy.asset import Asset
 from atapy.interval import Interval
 from atapy.market_data_connection import MarketDataConnection

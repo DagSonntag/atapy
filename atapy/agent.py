@@ -3,7 +3,8 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from atapy.constants import *
-from atapy.utils import load_classes_in_dir, to_utc_milliseconds, to_datetime
+from atapy.utils.method_utils import load_classes_in_dir
+from atapy.utils.datetime_utils import to_utc_milliseconds, to_datetime
 from atapy.data_accessor import DataAccessor
 from atapy.portfolio_handler import PortfolioHandler
 from atapy.interval import Interval

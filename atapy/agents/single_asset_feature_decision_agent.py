@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Tuple, List, Callable, Collection, Hashable
+from typing import Optional, Dict, Any, Tuple, List, Callable, Collection
 import pandas as pd
 import datetime
 import logging
@@ -12,23 +12,25 @@ from atapy.agent import Agent
 from atapy.data_accessor import DataAccessor
 from atapy.order import MarketOrder, Order
 from atapy.asset import Asset
-from atapy.utils import to_list, feature_visualization
+from atapy.utils.method_utils import to_list
+from atapy.utils.plot_utils import feature_visualization
 from atapy.portfolio_handlers.backtest_portfolio_handler import BacktestPortfolioHandler
 
 logger = logging.getLogger()
 
 
 def tulipy_generic_feature_func(data_df, ty_func, column_name_used_for_calc='close', **xargs):
-    res = ty_func(data_df[column_name_used_for_calc].values, **xargs)
+    input_data = data_df[column_name_used_for_calc].dropna()
+    res = ty_func(input_data.values, **xargs)
     if isinstance(res, np.ndarray):
         # Handle strange occurrences when very small periods are used
         if res.shape[0] > data_df.shape[0]:
             res = res[res.shape[0] - data_df.shape[0]:]
 
-        if res.shape[0] == data_df.shape[0]:
-            return pd.Series(res, index=data_df.index)
+        if res.shape[0] == input_data.shape[0]:
+            return pd.Series(res, index=input_data.index, name=ty_func.__name__)
         else:
-            return pd.Series(res, index=data_df.index[data_df.shape[0]-res.shape[0]:])
+            return pd.Series(res, index=input_data.index[input_data.shape[0]-res.shape[0]:], name=ty_func.__name__)
     else:
         raise NotImplementedError
 
@@ -62,13 +64,15 @@ def triple_ema_feature_func(data_df, period, column_name_used_for_calc='close'):
 
 
 MOVING_AVERAGES_DICT = {'sma': ty.sma, 'ema': ty.ema, 'dema': ty.dema, 'tema': ty.tema, 'kama': ty.kama,
-                        'hma': ty.hma, 'zlema': ty.zlema}
+                        'hma': ty.hma, 'zlema': ty.zlema, 'wma': ty.wma}
 def moving_average_feature_func(data_df, period,  column_name_used_for_calc='close', method='ema'):
     """ A handling function for the different ways of calculating moving averages. 
     See tulipy for details on the different methods. Possible values are """
     if method in MOVING_AVERAGES_DICT.keys():
-        return tulipy_generic_feature_func(data_df, MOVING_AVERAGES_DICT[method],
-                                           column_name_used_for_calc=column_name_used_for_calc, period=period)
+        res_series = tulipy_generic_feature_func(data_df, MOVING_AVERAGES_DICT[method],
+                                                 column_name_used_for_calc=column_name_used_for_calc, period=period)
+        res_series.name = res_series.name + "_{}".format(period)
+        return res_series
     else:
         raise NotImplementedError("Unknown method {} to calculate moving averages".format(method))
 moving_average_feature_func.__doc__ += str(list(MOVING_AVERAGES_DICT.keys()))

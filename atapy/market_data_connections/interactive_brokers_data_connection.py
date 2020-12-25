@@ -11,7 +11,7 @@ from typing import Tuple
 import math
 
 from atapy.data_accessor import RAW_DATA_COLUMN_TYPES, ASSET_INFO_COLUMN_TYPES
-from atapy.utils import to_datetime
+from atapy.utils.datetime_utils import to_datetime
 from atapy.asset import Asset
 from atapy.interval import Interval
 from atapy.market_data_connection import MarketDataConnection
@@ -207,9 +207,10 @@ class InteractiveBrokersDataConnection(MarketDataConnection, InteractiveBrokersC
                         # 165 - Server connection unsuccessful
                         # 185 - No security definition - wait, reconnect, ignore
                         # 200 - No security definition bad request - raise exception, no data will be available
+                        # 366 - 'No historical data query found for ticker id:101'
                         event_data = self.error_events[req_id]
-                        if event_data[0] in [162]:
-                            error_code = 162
+                        if event_data[0] in [162, 366]:
+                            error_code = event_data[0]
                         elif event_data[0] in [165, 185]:
                             logger.error("{}: Error due to missing data or on serverside".format(self))
                             self.ib.disconnect()

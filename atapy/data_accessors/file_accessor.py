@@ -4,7 +4,8 @@ import pandasql as ps
 import logging
 import datetime
 from typing import List, Optional
-from atapy.utils import to_datetime, check_types, to_tzinfo
+from atapy.utils.method_utils import check_types
+from atapy.utils.datetime_utils import to_datetime, to_tzinfo
 from atapy.asset import Asset
 from atapy.data_accessor import DataAccessor, RAW_DATA_COLUMN_TYPES, ASSET_INFO_COLUMN_TYPES, FEATURE_DATA_COLUMN_TYPES
 from atapy.interval import Interval
@@ -56,7 +57,7 @@ class FileAccessor(DataAccessor):
         key_columns = ['exchange', 'symbol', 'asset_type']
         self._update_file(self.data_folder / 'symbol_details.ftr', data_df, key_columns, on_duplicates)
         for exchange, exchange_df in data_df.groupby('exchange'):
-            path = self.data_folder / 'exchanges/{}/symbol_details.ftr'.format(exchange)
+            path = self.data_folder / 'exchanges/{}/symbol_details.ftr'.format(exchange.upper())
             self._update_file(path, exchange_df, key_columns, on_duplicates)
 
     def get_asset_information(self, exchange: str = None, asset_symbol: str = None, asset_type: str = None,
@@ -68,7 +69,7 @@ class FileAccessor(DataAccessor):
         if exchange is None:
             file_path = self.data_folder / 'symbol_details.ftr'
         else:
-            file_path = self.data_folder / 'exchanges/{}/symbol_details.ftr'.format(exchange)
+            file_path = self.data_folder / 'exchanges/{}/symbol_details.ftr'.format(exchange.upper())
         if Path(file_path).exists():
             df = pd.read_feather(file_path)
         else:

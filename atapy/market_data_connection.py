@@ -5,10 +5,10 @@ from typing import Type
 import pandas as pd
 from atapy.asset import Asset
 from atapy.interval import Interval
-from atapy.utils import load_classes_in_dir
+from atapy.utils.method_utils import load_classes_in_dir
 from atapy.constants import MARKET_DATA_CONNECTIONS_DIR
 from atapy.data_accessor import DataAccessor, FEATURE_DATA_COLUMN_TYPES
-from atapy.data_cleaning import add_start_and_end_time, filter_out_non_traded_hours, \
+from atapy.utils.data_cleaning_utils import add_start_and_end_time, filter_out_non_traded_hours, \
     fill_missing_intervals, aggregate_intraday_feature_data
 
 logger = logging.getLogger()

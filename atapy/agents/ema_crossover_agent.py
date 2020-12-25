@@ -9,7 +9,8 @@ from atapy.agent import Agent
 from atapy.data_accessor import DataAccessor
 from atapy.order import MarketOrder, Order
 from atapy.asset import Asset
-from atapy.utils import to_list, plotly_visualization
+from atapy.utils.method_utils import to_list
+from atapy.utils.plot_utils import plotly_visualization
 from atapy.portfolio_handlers.backtest_portfolio_handler import BacktestPortfolioHandler
 
 logger = logging.getLogger()

@@ -6,7 +6,7 @@ import logging
 from typing import Type, Optional
 import datetime
 from abc import ABC, abstractmethod
-from atapy.utils import load_classes_in_dir, add_time_zone_to_time
+from atapy.utils.method_utils import load_classes_in_dir
 from atapy.constants import DATA_ACCESSORS_DIR
 from atapy.asset import Asset
 from atapy.interval import Interval
@@ -213,7 +213,7 @@ class DataAccessor(ABC):
         """ A helper method to return the time_zone of an asset """
         info = self.get_asset_information(asset=asset)
         if info.shape[0] == 0:
-            raise AssetNotFoundException
+            raise AssetNotFoundException(str(asset))
         else:
             return pytz.timezone(info.time_zone.iloc[0])
 
@@ -221,13 +221,13 @@ class DataAccessor(ABC):
         """ Returns the start and end liquid time for an asset in naive datetime.time objects """
         info = self.get_asset_information(asset=asset)
         if info.shape[0] == 0:
-            raise AssetNotFoundException
+            raise AssetNotFoundException(str(asset))
         liquid_hours_str = info.liquid_hours.iloc[0]
         if liquid_hours_str is None or len(liquid_hours_str) != 9:
             raise NotImplementedError(
                 "The liquid hours are given in an unexpected format, please investigate: {}".format(liquid_hours_str))
         start_trade_time, end_trade_time = liquid_hours_str.split("-")
-        time_zone = self.get_asset_local_tzinfo(asset)
+        # time_zone = self.get_asset_local_tzinfo(asset)
         start_trade_time = datetime.time(int(start_trade_time[0:2]), int(start_trade_time[2:]))
         if end_trade_time == '2400':
             end_trade_time = datetime.time.max
